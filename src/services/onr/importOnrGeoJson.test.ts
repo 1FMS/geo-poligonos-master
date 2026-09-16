@@ -36,6 +36,7 @@ describe('parseOnrGeoJson', () => {
     expect(result.ignoredCount).toBe(0);
     const [polygon] = result.polygons;
     expect(polygon.properties.name).toBe('ONR - matrícula 8207');
+    expect(polygon.source).toBe('onr');
     expect(polygon.calculated.areaSquareMeters).toBeGreaterThan(0);
     expect(polygon.properties.customFields).toEqual(
       expect.arrayContaining([

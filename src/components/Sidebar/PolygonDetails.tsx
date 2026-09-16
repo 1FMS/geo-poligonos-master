@@ -1,12 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
+import { feature } from '@turf/helpers';
+import center from '@turf/center';
 import { usePolygons } from '../../app/PolygonProvider';
 import { requestMapFocus } from '../../app/mapFocusBus';
 import { toHectares, calculateAreaSquareMeters } from '../../services/geo/calculateArea';
 import { downloadPolygonKml } from '../../services/kml/exportKml';
 import { generatePolygonReport } from '../../services/pdf/generatePolygonReport';
 import { trimPolygonOverlap } from '../../services/geo/trimOverlap';
+import { fetchOnrPolygonsNear } from '../../services/onr/fetchOnrPolygon';
+import { NoSupportedGeometryError } from '../../services/onr/importOnrGeoJson';
+import { describeOnrMatches, type OnrMatch } from '../../services/onr/compareOnrCandidates';
 import type { PolygonEntity } from '../../types/polygon';
 import { CoordinatesTable } from './CoordinatesTable';
+
+const ONR_SEARCH_RADIUS_METERS = 30;
+// Below this, a candidate is more likely a nearby-but-different lot than a
+// match — matrículas returned within the search radius but with only
+// incidental overlap shouldn't be surfaced (or imported) as if confirmed.
+const ONR_MATCH_THRESHOLD_PERCENT = 60;
+
+const cartorioOf = (match: PolygonEntity): string | null =>
+  match.properties.customFields.find((field) => field.key === 'cartorio')?.value ?? null;
 
 const numberFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 // Conflict areas can be a fraction of a m² (a real registered overlap can be
@@ -30,12 +44,16 @@ export function PolygonDetails({ polygon }: PolygonDetailsProps) {
     editingPolygonId,
     deleteSelected,
     overlapDetails,
+    importPolygons,
   } = usePolygons();
   const [name, setName] = useState(polygon.properties.name);
   const [description, setDescription] = useState(polygon.properties.description);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [trimError, setTrimError] = useState<string | null>(null);
+  const [onrError, setOnrError] = useState<string | null>(null);
+  const [onrMatches, setOnrMatches] = useState<OnrMatch[] | null>(null);
+  const [isSearchingOnr, setIsSearchingOnr] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -96,6 +114,30 @@ export function PolygonDetails({ polygon }: PolygonDetailsProps) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível corrigir a sobreposição.';
       setTrimError(message);
+    }
+  };
+
+  const handleSearchOnr = async () => {
+    setOnrError(null);
+    setOnrMatches(null);
+    setIsSearchingOnr(true);
+    try {
+      const [lon, lat] = center(feature(polygon.geometry)).geometry.coordinates;
+      const { polygons: found } = await fetchOnrPolygonsNear(lat, lon, ONR_SEARCH_RADIUS_METERS);
+      const strongMatches = describeOnrMatches(polygon, found).filter(
+        (match) => match.overlapPercentOfSelected >= ONR_MATCH_THRESHOLD_PERCENT,
+      );
+      importPolygons(strongMatches.map((match) => match.candidate));
+      setOnrMatches(strongMatches);
+    } catch (error) {
+      if (error instanceof NoSupportedGeometryError) {
+        setOnrMatches([]);
+        return;
+      }
+      const message = error instanceof Error ? error.message : 'Não foi possível buscar o polígono na ONR.';
+      setOnrError(message);
+    } finally {
+      setIsSearchingOnr(false);
     }
   };
 
@@ -186,6 +228,10 @@ export function PolygonDetails({ polygon }: PolygonDetailsProps) {
           Baixar relatório PDF
         </button>
 
+        <button type="button" onClick={handleSearchOnr} disabled={isSearchingOnr}>
+          {isSearchingOnr ? 'Buscando…' : 'Buscar na ONR'}
+        </button>
+
         <button type="button" onClick={() => setConfirmingDelete(true)}>
           Excluir polígono
         </button>
@@ -195,6 +241,36 @@ export function PolygonDetails({ polygon }: PolygonDetailsProps) {
         <p role="alert" className="polygon-details__report-error">
           {reportError}
         </p>
+      )}
+
+      {onrError && (
+        <p role="alert" className="polygon-details__onr-error">
+          {onrError}
+        </p>
+      )}
+
+      {onrMatches && (
+        <div role="status" className="polygon-details__onr-result">
+          {onrMatches.length === 0 ? (
+            <p>
+              Nenhum polígono da ONR com correspondência (≥{ONR_MATCH_THRESHOLD_PERCENT}%) num raio de{' '}
+              {ONR_SEARCH_RADIUS_METERS}m.
+            </p>
+          ) : (
+            <ul className="polygon-details__onr-match-list">
+              {onrMatches.map((match) => {
+                const cartorio = cartorioOf(match.candidate);
+                return (
+                  <li key={match.candidate.id}>
+                    <strong>{match.candidate.properties.name}</strong>
+                    {cartorio ? ` (${cartorio})` : ''} — {percentFormatter.format(match.overlapPercentOfSelected)}%
+                    de sobreposição com este lote
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       )}
 
       <label className="field">

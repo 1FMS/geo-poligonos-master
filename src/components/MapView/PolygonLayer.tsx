@@ -11,6 +11,11 @@ import type { PolygonEntity } from '../../types/polygon';
 const STATUS_OK_COLOR = '#16a34a';
 const STATUS_OVERLAP_COLOR = '#ea580c';
 const SELECTED_COLOR = '#f59e0b';
+// A polygon fetched from the ONR for comparison isn't the user's own lot
+// data, so it gets a fixed identity color instead of the green/orange
+// conflict signal — that distinction matters more here than whether it
+// happens to overlap something.
+const ONR_COMPARISON_COLOR = '#2563eb';
 
 export function PolygonLayer({ polygon, overlapping = false }: { polygon: PolygonEntity; overlapping?: boolean }) {
   const { selectedPolygonId, editingPolygonId, drawingMode } = usePolygons();
@@ -43,7 +48,9 @@ function PolygonGeometryLayer({
   // Color communicates status: green for a clean polygon, strong orange for
   // one in conflict. Selection (amber) always takes priority since it marks
   // the user's current focus regardless of status.
-  const statusColor = overlapping ? STATUS_OVERLAP_COLOR : STATUS_OK_COLOR;
+  const statusColor = polygon.source === 'onr'
+    ? ONR_COMPARISON_COLOR
+    : overlapping ? STATUS_OVERLAP_COLOR : STATUS_OK_COLOR;
   const color = selected ? SELECTED_COLOR : statusColor;
   const style: L.PathOptions = {
     color,

@@ -97,6 +97,23 @@ describe('PolygonLayer selection halo', () => {
   });
 });
 
+describe('PolygonLayer ONR comparison styling', () => {
+  it('renders a polygon imported from the ONR in blue regardless of overlap status', () => {
+    const polygon: PolygonEntity = { ...makeSquare('onr-a', [0, 0], 1), source: 'onr' };
+
+    render(
+      <PolygonProvider>
+        <MapContainer center={[0.5, 0.5]} zoom={5}>
+          <Capture />
+          <PolygonLayer polygon={polygon} overlapping />
+        </MapContainer>
+      </PolygonProvider>,
+    );
+
+    expect(pathFor('onr-a', [polygon])?.getAttribute('stroke')).toBe('#2563eb');
+  });
+});
+
 describe('PolygonLayer during Terra Draw editing', () => {
   it('hides the selected polygon from Leaflet while Terra Draw owns its edit session', () => {
     const polygon = makeSquare('editing', [0, 0], 1);

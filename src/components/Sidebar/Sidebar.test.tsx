@@ -4,11 +4,37 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
 import { PolygonProvider, usePolygons } from '../../app/PolygonProvider';
 import { generatePolygonReport } from '../../services/pdf/generatePolygonReport';
+import { fetchOnrPolygonsNear } from '../../services/onr/fetchOnrPolygon';
+import { NoSupportedGeometryError } from '../../services/onr/importOnrGeoJson';
 import type { PolygonEntity } from '../../types/polygon';
 
 vi.mock('../../services/pdf/generatePolygonReport', () => ({
   generatePolygonReport: vi.fn(),
 }));
+
+vi.mock('../../services/onr/fetchOnrPolygon', () => ({
+  fetchOnrPolygonsNear: vi.fn(),
+}));
+
+function buildOnrPolygon(matricula: string, cartorio = '3º Registro de Imóveis de São Luis'): PolygonEntity {
+  return {
+    id: `onr-${matricula}`,
+    // Same geometry as `buildPolygon`'s "Fazenda Alfa" square, so tests that
+    // want a real match get one instead of two coincidentally-nearby shapes.
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[[-46.6, -23.5], [-46.5, -23.5], [-46.5, -23.4], [-46.6, -23.5]]],
+    },
+    source: 'onr',
+    properties: {
+      name: `ONR - matrícula ${matricula}`,
+      description: '',
+      createdAt: '2026-09-16T12:00:00.000Z',
+      customFields: [{ id: 'cartorio-field', key: 'cartorio', label: 'cartorio', value: cartorio }],
+    },
+    calculated: { areaSquareMeters: 500 },
+  };
+}
 
 function buildPolygon(id: string, name: string): PolygonEntity {
   return {
@@ -146,6 +172,69 @@ describe('Sidebar', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível gerar o PDF. Tente novamente.');
     expect(screen.getByLabelText('Nome')).toHaveValue('Fazenda Alfa');
+  });
+
+  describe('busca de polígono na ONR', () => {
+    afterEach(() => {
+      vi.mocked(fetchOnrPolygonsNear).mockReset();
+    });
+
+    it('mostra a % de sobreposição e o cartório de um candidato forte, e o importa como polígono de comparação', async () => {
+      vi.mocked(fetchOnrPolygonsNear).mockResolvedValueOnce({
+        polygons: [buildOnrPolygon('8207', '3º Registro de Imóveis de São Luis')],
+        ignoredCount: 0,
+      });
+
+      renderSidebar([buildPolygon('a', 'Fazenda Alfa')], 'a');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Buscar na ONR' }));
+
+      const result = await screen.findByRole('status');
+      expect(within(result).getByText(/ONR - matrícula 8207/)).toBeInTheDocument();
+      expect(within(result).getByText(/3º Registro de Imóveis de São Luis/)).toBeInTheDocument();
+      expect(within(result).getByText(/de sobreposição com este lote/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Voltar à lista' }));
+      expect(screen.getByRole('button', { name: /ONR - matrícula 8207/ })).toBeInTheDocument();
+    });
+
+    it('não mostra nem importa candidatos com sobreposição abaixo de 60%', async () => {
+      const weakCandidate = buildOnrPolygon('9999', 'Outro cartório');
+      weakCandidate.geometry = {
+        type: 'Polygon',
+        coordinates: [[[-46.6, -23.5], [-46.599, -23.5], [-46.599, -23.499], [-46.6, -23.5]]],
+      };
+      vi.mocked(fetchOnrPolygonsNear).mockResolvedValueOnce({ polygons: [weakCandidate], ignoredCount: 0 });
+
+      renderSidebar([buildPolygon('a', 'Fazenda Alfa')], 'a');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Buscar na ONR' }));
+
+      expect(await screen.findByText(/Nenhum polígono da ONR/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Voltar à lista' }));
+      expect(screen.queryByRole('button', { name: /ONR - matrícula 9999/ })).not.toBeInTheDocument();
+    });
+
+    it('mostra mensagem de "nenhum encontrado" quando a busca não acha candidatos', async () => {
+      vi.mocked(fetchOnrPolygonsNear).mockRejectedValueOnce(new NoSupportedGeometryError());
+
+      renderSidebar([buildPolygon('a', 'Fazenda Alfa')], 'a');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Buscar na ONR' }));
+
+      expect(await screen.findByText(/Nenhum polígono da ONR/)).toBeInTheDocument();
+    });
+
+    it('exibe mensagem de erro quando a busca na ONR falha', async () => {
+      vi.mocked(fetchOnrPolygonsNear).mockRejectedValueOnce(new Error('indisponível'));
+
+      renderSidebar([buildPolygon('a', 'Fazenda Alfa')], 'a');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Buscar na ONR' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('indisponível');
+    });
   });
 
   describe('modal semantics do diálogo de exclusão', () => {

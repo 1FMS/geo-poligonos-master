@@ -43,6 +43,7 @@ const buildEntity = (geometry: PolygonGeometry, properties: Record<string, unkno
   return {
     id: crypto.randomUUID(),
     geometry,
+    source: 'onr',
     properties: {
       name,
       description: '',
