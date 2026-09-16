@@ -32,13 +32,25 @@ function validateGeometry(geometry: unknown): asserts geometry is PolygonGeometr
   try {
     if (!geometry || typeof geometry !== 'object') throw new InvalidPolygonGeometryError();
     const candidate = geometry as PolygonGeometry;
-    if (!['Polygon', 'MultiPolygon'].includes(candidate.type) || !isValidPolygonGeometry(candidate)) {
+    if (!['Polygon', 'MultiPolygon'].includes(candidate.type) || !hasFinitePositions(candidate) || !isValidPolygonGeometry(candidate)) {
       throw new InvalidPolygonGeometryError();
     }
   } catch {
     throw new InvalidPolygonGeometryError();
   }
 }
+
+const isFinitePosition = (position: unknown): position is GeoJSON.Position =>
+  Array.isArray(position)
+  && position.length >= 2
+  && position.every((coordinate) => typeof coordinate === 'number' && Number.isFinite(coordinate));
+
+const hasFinitePositions = (geometry: PolygonGeometry): boolean => {
+  const polygons: unknown[] = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  return Array.isArray(polygons)
+    && polygons.every((polygon) => Array.isArray(polygon)
+      && polygon.every((ring) => Array.isArray(ring) && ring.every(isFinitePosition)));
+};
 
 export function geometryFromTerraFeature(feature: Feature): PolygonGeometry {
   try {
@@ -46,7 +58,7 @@ export function geometryFromTerraFeature(feature: Feature): PolygonGeometry {
       throw new InvalidPolygonGeometryError();
     }
     validateGeometry(feature.geometry);
-    return feature.geometry;
+    return { type: 'Polygon', coordinates: clonePolygonCoordinates(feature.geometry.coordinates) };
   } catch {
     throw new InvalidPolygonGeometryError();
   }
@@ -54,21 +66,26 @@ export function geometryFromTerraFeature(feature: Feature): PolygonGeometry {
 
 export function createPolygonEntity(geometry: PolygonGeometry): PolygonEntity {
   validateGeometry(geometry);
+  const detachedGeometry = cloneGeometry(geometry);
   return {
     id: crypto.randomUUID(),
-    geometry,
+    geometry: detachedGeometry,
     properties: {
       name: 'Polígono sem nome',
       description: '',
       createdAt: new Date().toISOString(),
       customFields: [],
     },
-    calculated: { areaSquareMeters: calculateAreaSquareMeters(geometry) },
+    calculated: { areaSquareMeters: calculateAreaSquareMeters(detachedGeometry) },
   };
 }
 
 const clonePolygonCoordinates = (coordinates: Polygon['coordinates']): Polygon['coordinates'] =>
   coordinates.map((ring) => ring.map((position) => [...position]));
+
+const cloneGeometry = (geometry: PolygonGeometry): PolygonGeometry => geometry.type === 'Polygon'
+  ? { type: 'Polygon', coordinates: clonePolygonCoordinates(geometry.coordinates) }
+  : { type: 'MultiPolygon', coordinates: geometry.coordinates.map(clonePolygonCoordinates) };
 
 export function featuresForPolygon(entity: PolygonEntity): TerraPolygonFeature[] {
   const parts = entity.geometry.type === 'Polygon'
@@ -108,7 +125,7 @@ export function geometryFromEditingFeatures(
     }
     const partGeometry = geometryFromTerraFeature(feature);
     if (partGeometry.type !== 'Polygon') throw new InvalidPolygonGeometryError();
-    parts[partIndex] = partGeometry.coordinates;
+    parts[partIndex] = clonePolygonCoordinates(partGeometry.coordinates);
   }
 
   if (parts.some((part) => !part)) throw new InvalidPolygonGeometryError();

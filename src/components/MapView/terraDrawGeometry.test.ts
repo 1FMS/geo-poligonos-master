@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type { Feature } from 'geojson';
+import type { PolygonGeometry } from '../../types/polygon';
 import {
   createPolygonEntity,
   featuresForPolygon,
@@ -40,6 +42,59 @@ describe('Terra Draw geometry adapters', () => {
     })).toThrow(InvalidPolygonGeometryError);
   });
 
+  it('does not share geometry references with a Terra Draw feature', () => {
+    const feature = {
+      ...triangleFeature,
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [[[0, 0], [1, 0], [0, 1], [0, 0]]],
+      },
+    };
+    const converted = geometryFromTerraFeature(feature);
+
+    feature.geometry.coordinates[0][0][0] = 99;
+
+    expect(converted.coordinates[0][0]).toEqual([0, 0]);
+  });
+
+  it('does not share geometry references with a newly created entity', () => {
+    const input: PolygonGeometry = {
+      type: 'Polygon',
+      coordinates: [[[0, 0], [1, 0], [0, 1], [0, 0]]],
+    };
+    const entity = createPolygonEntity(input);
+
+    input.coordinates[0][0][0] = 99;
+
+    expect(entity.geometry.coordinates[0][0]).toEqual([0, 0]);
+  });
+
+  it.each([
+    ['a coordinate string', [['0', 0], [1, 0], [0, 1], ['0', 0]]],
+    ['a NaN coordinate', [[Number.NaN, 0], [1, 0], [0, 1], [Number.NaN, 0]]],
+    ['an infinite coordinate', [[Infinity, 0], [1, 0], [0, 1], [Infinity, 0]]],
+    ['a one-dimensional position', [[0], [1, 0], [0, 1], [0]]],
+  ])('rejects a polygon with %s', (_description, ring) => {
+    const invalidFeature = {
+      ...triangleFeature,
+      geometry: { type: 'Polygon' as const, coordinates: [ring] },
+    } as unknown as Feature;
+
+    expect(() => geometryFromTerraFeature(invalidFeature)).toThrow(InvalidPolygonGeometryError);
+  });
+
+  it('accepts and preserves finite additional position dimensions', () => {
+    const feature = {
+      ...triangleFeature,
+      geometry: {
+        type: 'Polygon' as const,
+        coordinates: [[[0, 0, 10], [1, 0, 10], [0, 1, 10], [0, 0, 10]]],
+      },
+    };
+
+    expect(geometryFromTerraFeature(feature).coordinates[0][0]).toEqual([0, 0, 10]);
+  });
+
   it('splits and recomposes a MultiPolygon in stable part order', () => {
     const entity = createPolygonEntity(multiPolygon);
     entity.id = 'multi';
@@ -67,10 +122,13 @@ describe('Terra Draw geometry adapters', () => {
     ]);
 
     features[1].geometry.coordinates[0][1] = [9, 5];
-    expect(geometryFromEditingFeatures(entity.geometry, features)).toEqual({
+    const recomposed = geometryFromEditingFeatures(entity.geometry, features);
+    expect(recomposed).toEqual({
       type: 'MultiPolygon',
       coordinates: [entity.geometry.coordinates[0], features[1].geometry.coordinates],
     });
+    features[1].geometry.coordinates[0][0][0] = 99;
+    expect(recomposed.type === 'MultiPolygon' && recomposed.coordinates[1][0][0]).toEqual([5, 5]);
   });
 
   it('preserves interior rings when splitting a Polygon', () => {
@@ -93,6 +151,22 @@ describe('Terra Draw geometry adapters', () => {
 
     expect(() => geometryFromEditingFeatures(entity.geometry, [first])).toThrow(InvalidPolygonGeometryError);
     expect(() => geometryFromEditingFeatures(entity.geometry, [first, { ...first, id: 'duplicate' }])).toThrow(InvalidPolygonGeometryError);
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['fractional', 0.5],
+    ['negative', -1],
+    ['out of range', 2],
+  ])('rejects a %s multipart index', (_description, partIndex) => {
+    const entity = createPolygonEntity(multiPolygon);
+    const [first, second] = featuresForPolygon(entity);
+    const { partIndex: _originalPartIndex, ...propertiesWithoutPartIndex } = first.properties;
+    const invalidFirst = {
+      ...first,
+      properties: partIndex === undefined ? propertiesWithoutPartIndex : { ...first.properties, partIndex },
+    };
+    expect(() => geometryFromEditingFeatures(entity.geometry, [invalidFirst, second])).toThrow(InvalidPolygonGeometryError);
   });
 
   it('ignores creation features while recomposing edited parts', () => {
