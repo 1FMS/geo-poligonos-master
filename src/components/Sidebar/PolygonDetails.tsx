@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePolygons } from '../../app/PolygonProvider';
 import { requestMapFocus } from '../../app/mapFocusBus';
-import { toHectares } from '../../services/geo/calculateArea';
+import { toHectares, calculateAreaSquareMeters } from '../../services/geo/calculateArea';
 import { downloadPolygonKml } from '../../services/kml/exportKml';
 import { generatePolygonReport } from '../../services/pdf/generatePolygonReport';
+import { trimPolygonOverlap } from '../../services/geo/trimOverlap';
 import type { PolygonEntity } from '../../types/polygon';
 import { CoordinatesTable } from './CoordinatesTable';
 
@@ -20,12 +21,21 @@ interface PolygonDetailsProps {
 }
 
 export function PolygonDetails({ polygon }: PolygonDetailsProps) {
-  const { polygons, selectPolygon, updateProperties, setEditing, editingPolygonId, deleteSelected, overlapDetails } =
-    usePolygons();
+  const {
+    polygons,
+    selectPolygon,
+    updateProperties,
+    updateGeometry,
+    setEditing,
+    editingPolygonId,
+    deleteSelected,
+    overlapDetails,
+  } = usePolygons();
   const [name, setName] = useState(polygon.properties.name);
   const [description, setDescription] = useState(polygon.properties.description);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [trimError, setTrimError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -69,6 +79,23 @@ export function PolygonDetails({ polygon }: PolygonDetailsProps) {
       generatePolygonReport(polygon);
     } catch {
       setReportError('Não foi possível gerar o PDF. Tente novamente.');
+    }
+  };
+
+  // Removes exactly the shared region from this polygon, leaving the
+  // neighbor untouched — the smallest possible edit to clear the conflict,
+  // as an alternative to manually nudging vertices in the geometry editor.
+  const handleTrimOverlap = (otherId: string) => {
+    const other = polygons.find((candidate) => candidate.id === otherId);
+    if (!other) return;
+
+    try {
+      setTrimError(null);
+      const geometry = trimPolygonOverlap(polygon.geometry, other.geometry);
+      updateGeometry(polygon.id, geometry, calculateAreaSquareMeters(geometry));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível corrigir a sobreposição.';
+      setTrimError(message);
     }
   };
 
@@ -121,10 +148,24 @@ export function PolygonDetails({ polygon }: PolygonDetailsProps) {
                   onClick={() => requestMapFocus([conflict.geometry])}
                 >
                   Ver no mapa
+                </button>{' '}
+                <button
+                  type="button"
+                  className="polygon-details__overlap-trim"
+                  disabled={isEditingGeometry}
+                  onClick={() => handleTrimOverlap(conflict.otherId)}
+                  title="Remove apenas a parte deste polígono que se sobrepõe ao vizinho, sem alterar o resto do contorno"
+                >
+                  Corrigir sobreposição
                 </button>
               </li>
             ))}
           </ul>
+          {trimError && (
+            <p role="alert" className="polygon-details__overlap-trim-error">
+              {trimError}
+            </p>
+          )}
         </div>
       )}
 

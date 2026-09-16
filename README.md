@@ -40,10 +40,11 @@ A intenção é integrar essas capacidades ao domínio, autenticação, permiss�
 
 ### Mapa e desenho
 
-- mapas de satélite Esri World Imagery e Google Satellite;
+- mapa de satélite Esri World Imagery;
 - pan, zoom, desenho manual e edição de vértices via Terra Draw, com um adaptador Leaflet;
 - várias entidades simultâneas, com uma seleção ativa por vez;
 - em um `MultiPolygon`, a edição expõe uma parte por vez: selecionar uma parte carrega seus vértices e midpoints no Terra Draw, e trocar de parte troca a seleção sem afetar as demais;
+- ao arrastar um vértice em edição, snap magnético (até 0,5 m) para a borda exata de qualquer outro polígono, facilitando o ajuste fino de divisas vizinhas;
 - enquadramento automático após importação;
 - seleção do menor polígono sob o clique, útil para um lote contido em uma área maior.
 
@@ -61,13 +62,15 @@ A intenção é integrar essas capacidades ao domínio, autenticação, permiss�
 - comparação par a par das entidades;
 - destaque dos polígonos e da região exata de interseção;
 - área sobreposta em m² e percentual de cada polígono;
-- atalho no painel para enquadrar o conflito no mapa.
+- atalho no painel para enquadrar o conflito no mapa;
+- cor por status no mapa: verde para um polígono sem conflito, laranja forte para um em sobreposição, com traço tracejado adicional; a região de interseção em si é destacada com contorno vermelho e glow;
+- correção automática e cirúrgica: o botão "Corrigir sobreposição" remove, via `@turf/difference`, exatamente a fatia compartilhada com o vizinho, sem alterar o restante do contorno do polígono.
 
 Contenção quase integral não é classificada como conflito. Quando a interseção cobre pelo menos 98% do menor polígono — por exemplo, um lote dentro de um bairro — a relação é considerada hierárquica. Um buffer negativo de `0,001 m / 2` descarta ruído de bordas que apenas se tocam; invasões reais pequenas continuam sendo detectadas.
 
 ### Entrada e saída
 
-- importação de `.kml`, `.kmz` e `.dxf`;
+- importação de `.kml`, `.kmz` e `.dxf`, com seleção de múltiplos arquivos de uma vez (o seletor aceita `multiple`, e cada arquivo é processado em sequência, acumulando avisos de elementos ignorados e falhas por arquivo);
 - exportação individual em `.kml`;
 - relatório individual em `.pdf`.
 
@@ -198,7 +201,7 @@ src/
 | Vite | Desenvolvimento e build. |
 | Leaflet / React-Leaflet | Mapa, layers e geometrias. |
 | Terra Draw + adaptador Leaflet (`terra-draw-leaflet-adapter`) | Desenho e edição de vértices sobre o mapa Leaflet. |
-| Turf.js | Área, interseção, buffers e operações GeoJSON. |
+| Turf.js (`@turf/*`) | Área, interseção, buffers, diferença (correção de sobreposição) e ponto mais próximo em linha (snap de vértice). |
 | Proj4js | Conversão WGS84 ↔ UTM. |
 | `@tmcw/togeojson` | KML para GeoJSON. |
 | `tokml` | GeoJSON para KML. |
@@ -264,6 +267,8 @@ UTM, hectares, nomes dos vértices e sobreposições são dados derivados.
 13. **Contenção ≥ 98% do menor polígono não é conflito de sobreposição.**
 14. **Bordas apenas coincidentes não geram falso positivo.**
 15. **Downloads utilizam nomes sanitizados.**
+16. **A correção de sobreposição altera apenas o polígono escolhido.** O vizinho usado como referência não é modificado; se a sobreposição consumir o polígono inteiro, a operação é recusada em vez de apagá-lo.
+17. **O snap de vértice durante a edição é apenas um auxílio visual.** Ele arredonda a posição para a borda mais próxima dentro de 0,5 m; fora desse raio, a coordenada arrastada pelo usuário é usada normalmente.
 
 ## Importação
 
@@ -362,7 +367,8 @@ npm run build
 - parsing e cálculos ocorrem na thread principal;
 - sem autosave, histórico ou concorrência;
 - sem limites explícitos de arquivo, entidades ou vértices;
-- arquivos originais não são guardados para auditoria/reprocessamento.
+- arquivos originais não são guardados para auditoria/reprocessamento;
+- a edição de geometria via Terra Draw não suporta polígonos com furos (anéis internos); coordenadas com mais de 9 casas decimais (comuns em KML/KMZ de GIS/Google Earth) são arredondadas somente para fins de edição, sem perda prática de precisão.
 
 ## Implementação no Regula
 

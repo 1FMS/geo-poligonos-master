@@ -7,10 +7,18 @@ import {
   type HexColor,
 } from 'terra-draw';
 import { TerraDrawLeafletAdapter } from 'terra-draw-leaflet-adapter';
+import { snapToNearestPolygonEdge } from '../../services/geo/snapToPolygon';
+import type { PolygonGeometry } from '../../types/polygon';
 import { geometryFromTerraFeature, INVALID_POLYGON_MESSAGE } from './terraDrawGeometry';
 
 export interface TerraDrawHandlers {
   onInvalidGeometry: (message: string) => void;
+  /**
+   * Boundaries of every polygon other than the one currently being edited,
+   * so a dragged vertex can snap onto a neighbor's exact edge instead of
+   * relying on eyeballing it against the underlying satellite imagery.
+   */
+  getSnapTargets: () => PolygonGeometry[];
 }
 
 function isValidPolygonFeature(feature: GeoJSONStoreFeatures): boolean {
@@ -58,7 +66,14 @@ export function createTerraDraw(map: L.Map, handlers: TerraDrawHandlers): TerraD
           polygon: {
             feature: {
               draggable: false,
-              coordinates: { midpoints: true, draggable: true, deletable: true },
+              coordinates: {
+                midpoints: true,
+                draggable: true,
+                deletable: true,
+                snappable: {
+                  toCustom: event => snapToNearestPolygonEdge(event.lng, event.lat, handlers.getSnapTargets()),
+                },
+              },
               validation: feature => {
                 const valid = isValidPolygonFeature(feature);
                 if (!valid) handlers.onInvalidGeometry(INVALID_POLYGON_MESSAGE);

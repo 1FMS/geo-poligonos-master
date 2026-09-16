@@ -3,12 +3,12 @@ import type { FeatureCollection, Polygon } from 'geojson';
 
 import { usePolygons } from '../../app/PolygonProvider';
 
-// A bright white outline around a saturated fill keeps the conflict zone
-// legible whether the map underneath is pale soil or dark vegetation —
-// the same halo trick used for the selected-polygon outline.
+// A thick red outline with a glow (see .overlap-highlight in styles.css)
+// around a saturated fill keeps the conflict zone unmistakable whether the
+// map underneath is pale soil or dark vegetation.
 const OVERLAP_STYLE = {
-  color: '#ffffff',
-  weight: 2,
+  color: '#dc2626',
+  weight: 5,
   fillColor: '#e11d1d',
   fillOpacity: 0.65,
   className: 'overlap-highlight',

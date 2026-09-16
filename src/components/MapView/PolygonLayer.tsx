@@ -4,7 +4,13 @@ import { GeoJSON } from 'react-leaflet';
 import type { FeatureCollection, Polygon } from 'geojson';
 import { usePolygons } from '../../app/PolygonProvider';
 import type { PolygonEntity } from '../../types/polygon';
-import { colorForPolygonId } from './polygonPalette';
+
+// Color communicates polygon status at a glance: green means no conflict,
+// a strong orange flags an overlap, and selection (amber) always wins since
+// it's the user's current focus regardless of status.
+const STATUS_OK_COLOR = '#16a34a';
+const STATUS_OVERLAP_COLOR = '#ea580c';
+const SELECTED_COLOR = '#f59e0b';
 
 export function PolygonLayer({ polygon, overlapping = false }: { polygon: PolygonEntity; overlapping?: boolean }) {
   const { selectedPolygonId, editingPolygonId, drawingMode } = usePolygons();
@@ -34,18 +40,16 @@ function PolygonGeometryLayer({
     features: parts.map(coordinates => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates } })),
   };
 
-  // Stroke color always identifies the polygon itself (stable per id), so
-  // polygons stay distinguishable from one another regardless of state.
-  // Selection and overlap are conveyed independently — weight/glow for
-  // selection, dash pattern for overlap — so all three signals can combine
-  // without one erasing another.
-  const identityColor = colorForPolygonId(polygon.id);
-  const color = selected ? '#f59e0b' : identityColor;
+  // Color communicates status: green for a clean polygon, strong orange for
+  // one in conflict. Selection (amber) always takes priority since it marks
+  // the user's current focus regardless of status.
+  const statusColor = overlapping ? STATUS_OVERLAP_COLOR : STATUS_OK_COLOR;
+  const color = selected ? SELECTED_COLOR : statusColor;
   const style: L.PathOptions = {
     color,
     fillColor: color,
     weight: selected ? 5 : overlapping ? 3 : 2,
-    fillOpacity: selected ? 0.34 : overlapping ? 0.22 : 0.18,
+    fillOpacity: selected ? 0.34 : overlapping ? 0.3 : 0.18,
     // Leaflet's setStyle merges options in (Util.setOptions only assigns keys
     // present in the new object) rather than replacing them — an omitted key
     // keeps its previous value. dashArray must always be set explicitly

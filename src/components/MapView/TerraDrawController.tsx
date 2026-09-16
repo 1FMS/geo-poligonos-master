@@ -48,6 +48,13 @@ export function TerraDrawController({ onDrawReady }: TerraDrawControllerProps) {
         setError(message);
         if (current.current.drawingMode) current.current.setDrawing(false);
       },
+      getSnapTargets: () => {
+        const editingId = editingSessionRef.current?.polygonId;
+        if (!editingId) return [];
+        return current.current.polygons
+          .filter(entity => entity.id !== editingId)
+          .map(entity => entity.geometry);
+      },
     });
     instance.current = draw;
     let creationId: string | number | undefined;
