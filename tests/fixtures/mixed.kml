@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Talhão 1</name>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              -46.6,-23.5,0 -46.5,-23.5,0 -46.5,-23.4,0 -46.6,-23.5,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+    <Placemark>
+      <name>Ponto de referência</name>
+      <Point>
+        <coordinates>-46.55,-23.45,0</coordinates>
+      </Point>
+    </Placemark>
+    <Placemark>
+      <name>Trilha</name>
+      <LineString>
+        <coordinates>-46.6,-23.5,0 -46.5,-23.4,0</coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>
