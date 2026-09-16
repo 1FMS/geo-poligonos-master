@@ -66,6 +66,40 @@ describe('parseKml', () => {
     expect(result.ignoredCount).toBe(2);
   });
 
+  it('funde várias partes Polygon de um MultiGeometry em uma única entidade MultiPolygon', () => {
+    const multiPolygonKml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>Gleba Composta</name>
+      <MultiGeometry>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>-46.6,-23.5,0 -46.5,-23.5,0 -46.5,-23.4,0 -46.6,-23.5,0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>-46.3,-23.2,0 -46.2,-23.2,0 -46.2,-23.1,0 -46.3,-23.2,0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </MultiGeometry>
+    </Placemark>
+  </Document>
+</kml>`;
+
+    const result = parseKml(multiPolygonKml);
+
+    expect(result.polygons).toHaveLength(1);
+    expect(result.ignoredCount).toBe(0);
+    expect(result.polygons[0].geometry.type).toBe('MultiPolygon');
+    expect(result.polygons[0].geometry.type === 'MultiPolygon' && result.polygons[0].geometry.coordinates).toHaveLength(2);
+  });
+
   it('lança InvalidKmlError para XML malformado', () => {
     expect(() => parseKml(readFixture('invalid.kml'))).toThrow(InvalidKmlError);
   });

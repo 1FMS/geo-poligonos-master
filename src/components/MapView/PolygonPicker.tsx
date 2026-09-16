@@ -19,8 +19,8 @@ export function PolygonPicker() {
     const match = findSmallestPolygonAt(polygons, [event.latlng.lng, event.latlng.lat]);
     if (!match) return;
 
-    // A click that lands on the polygon currently being edited is Geoman
-    // interacting with its own vertices/fill, not a request to change
+    // A click that lands on the polygon currently being edited is the map
+    // editor interacting with its own vertices/fill, not a request to change
     // selection — leave it alone so an active multi-vertex edit isn't reset.
     if (editingPolygonId !== null && match.id === editingPolygonId) return;
 

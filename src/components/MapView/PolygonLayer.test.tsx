@@ -35,6 +35,12 @@ const pathFor = (polygonId: string, allEntities: PolygonEntity[]): Element | nul
   return (polygons[index]?.getElement() as Element | undefined) ?? null;
 };
 
+const mapPolygonLayers = (): L.Polygon[] => {
+  const polygons: L.Polygon[] = [];
+  map.eachLayer((layer) => { if (layer instanceof L.Polygon) polygons.push(layer); });
+  return polygons;
+};
+
 describe('PolygonLayer overlap styling', () => {
   it('removes the dashed overlap outline once the polygon stops overlapping (not stuck from a stale style merge)', () => {
     const polygon = makeSquare('a', [0, 0], 1);
@@ -88,6 +94,55 @@ describe('PolygonLayer selection halo', () => {
 
     expect(pathFor('a', [a, b])?.classList.contains('polygon-layer--selected')).toBe(false);
     expect(pathFor('b', [a, b])?.classList.contains('polygon-layer--selected')).toBe(true);
+  });
+});
+
+describe('PolygonLayer during Terra Draw editing', () => {
+  it('hides the selected polygon from Leaflet while Terra Draw owns its edit session', () => {
+    const polygon = makeSquare('editing', [0, 0], 1);
+
+    render(
+      <PolygonProvider>
+        <MapContainer center={[0.5, 0.5]} zoom={5}>
+          <Capture />
+          <PolygonLayer polygon={polygon} />
+        </MapContainer>
+      </PolygonProvider>,
+    );
+
+    act(() => {
+      store.selectPolygon(polygon.id);
+      store.setEditing(polygon.id);
+    });
+
+    expect(mapPolygonLayers()).toHaveLength(0);
+  });
+
+  it('restores the Leaflet layer with its normal identity style when editing ends', () => {
+    const polygon = makeSquare('editing', [0, 0], 1);
+
+    render(
+      <PolygonProvider>
+        <MapContainer center={[0.5, 0.5]} zoom={5}>
+          <Capture />
+          <PolygonLayer polygon={polygon} />
+        </MapContainer>
+      </PolygonProvider>,
+    );
+
+    act(() => {
+      store.selectPolygon(polygon.id);
+      store.setEditing(polygon.id);
+    });
+    expect(mapPolygonLayers()).toHaveLength(0);
+
+    act(() => { store.setEditing(null); });
+
+    const path = mapPolygonLayers()[0]?.getElement();
+    expect(path).not.toBeNull();
+    expect(path?.getAttribute('stroke')).toBe('#f59e0b');
+    expect(path?.getAttribute('stroke-width')).toBe('5');
+    expect(path?.classList.contains('polygon-layer--selected')).toBe(true);
   });
 });
 

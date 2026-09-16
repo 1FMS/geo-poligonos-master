@@ -41,8 +41,9 @@ A intenção é integrar essas capacidades ao domínio, autenticação, permiss�
 ### Mapa e desenho
 
 - mapas de satélite Esri World Imagery e Google Satellite;
-- pan, zoom, desenho manual e edição de vértices;
+- pan, zoom, desenho manual e edição de vértices via Terra Draw, com um adaptador Leaflet;
 - várias entidades simultâneas, com uma seleção ativa por vez;
+- em um `MultiPolygon`, a edição expõe uma parte por vez: selecionar uma parte carrega seus vértices e midpoints no Terra Draw, e trocar de parte troca a seleção sem afetar as demais;
 - enquadramento automático após importação;
 - seleção do menor polígono sob o clique, útil para um lote contido em uma área maior.
 
@@ -196,7 +197,7 @@ src/
 | TypeScript | Contratos do domínio e validação estática. |
 | Vite | Desenvolvimento e build. |
 | Leaflet / React-Leaflet | Mapa, layers e geometrias. |
-| Leaflet-Geoman | Desenho e edição de vértices. |
+| Terra Draw + adaptador Leaflet (`terra-draw-leaflet-adapter`) | Desenho e edição de vértices sobre o mapa Leaflet. |
 | Turf.js | Área, interseção, buffers e operações GeoJSON. |
 | Proj4js | Conversão WGS84 ↔ UTM. |
 | `@tmcw/togeojson` | KML para GeoJSON. |
@@ -287,7 +288,7 @@ Elementos incompatíveis são ignorados e contabilizados. Se não houver polígo
 
 1. Leitura como texto e parsing XML com `DOMParser`.
 2. Conversão para `FeatureCollection` por `@tmcw/togeojson`.
-3. Aceite de `Polygon`, `MultiPolygon` e membros poligonais de `GeometryCollection`.
+3. Aceite de `Polygon`, `MultiPolygon` e membros poligonais de `GeometryCollection`; múltiplos `Polygon` de uma mesma `MultiGeometry` KML (um único Placemark) são fundidos em uma única entidade `MultiPolygon`, preservando a unidade lógica do KML de origem.
 4. `name` e `description` alimentam propriedades padrão.
 5. Propriedades não técnicas tornam-se campos personalizados.
 6. Geometrias incompatíveis incrementam `ignoredCount`.
@@ -361,7 +362,6 @@ npm run build
 - parsing e cálculos ocorrem na thread principal;
 - sem autosave, histórico ou concorrência;
 - sem limites explícitos de arquivo, entidades ou vértices;
-- exportar e reimportar um `MultiPolygon` pode recriar polígonos separados, preservando a geometria, mas não sua unidade lógica;
 - arquivos originais não são guardados para auditoria/reprocessamento.
 
 ## Implementação no Regula
@@ -372,9 +372,9 @@ O **Regula é o sistema-base** no qual esta feature será implementada. O objeti
 
 Consequentemente:
 
-- este protótipo continua usando Leaflet, React-Leaflet e Leaflet-Geoman;
+- este protótipo continua usando Leaflet, React-Leaflet e Terra Draw (com adaptador Leaflet);
 - o Regula continua usando Google Maps JavaScript API;
-- Leaflet-Geoman não precisa ser removido nem substituído neste repositório;
+- Terra Draw não precisa ser removido nem substituído neste repositório;
 - Leaflet não deve ser introduzido no Regula apenas para reutilizar componentes visuais;
 - regras e serviços independentes do mapa podem ser reaproveitados;
 - autenticação, RBAC, auditoria, imports e persistência continuam seguindo os padrões do Regula.
@@ -384,7 +384,7 @@ Consequentemente:
 | Responsabilidade | Protótipo atual | Regula hoje | Implementação recomendada no Regula |
 |---|---|---|---|
 | Mapa-base | Leaflet | Google Maps JS API | Manter Google Maps. |
-| Desenho/edição | Leaflet-Geoman | Sem ferramenta completa ativa | Adicionar Terra Draw com adaptador Google Maps, se a edição for aprovada. |
+| Desenho/edição | Terra Draw + adaptador Leaflet | Sem ferramenta completa ativa | Adicionar Terra Draw com adaptador Google Maps, se a edição for aprovada. |
 | Renderização | React-Leaflet | Componentes Google Maps | Estender os componentes existentes. |
 | Geometria | GeoJSON/WGS84 | GeoJSON/WGS84 | Manter o contrato do Regula. |
 | Estado | Context + reducer em memória | Convex e estado React/Zustand | Convex confirmado; estado local apenas durante edição. |
@@ -413,7 +413,7 @@ O maior reaproveitamento está na lógica independente de Leaflet:
 - modelos de relatório;
 - testes de regras geoespaciais.
 
-Componentes React acoplados a Leaflet/Geoman servem como referência de comportamento e UX, não como código diretamente transplantável para o Regula.
+Componentes React acoplados a Leaflet/Terra Draw servem como referência de comportamento e UX, não como código diretamente transplantável para o Regula.
 
 ### Onde o Regula precisará ser adaptado
 

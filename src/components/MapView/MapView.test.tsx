@@ -5,12 +5,16 @@ import App from '../../App';
 import { PolygonProvider } from '../../app/PolygonProvider';
 
 const leaflet = vi.hoisted(() => ({
-  map: { on: vi.fn(), off: vi.fn(), pm: { setLang: vi.fn(), disableDraw: vi.fn() } },
+  map: { on: vi.fn(), off: vi.fn() },
   loading: undefined as undefined | (() => void),
   tileError: undefined as undefined | (() => void),
   tileLoad: undefined as undefined | (() => void),
   mapContainer: undefined as undefined | { center: number[]; zoom: number; minZoom: number },
   tileLayer: undefined as undefined | { url: string; attribution: string },
+}));
+
+vi.mock('./TerraDrawController', () => ({
+  TerraDrawController: () => null,
 }));
 
 vi.mock('react-leaflet', () => ({

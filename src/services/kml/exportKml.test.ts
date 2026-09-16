@@ -83,31 +83,26 @@ describe('serializePolygonKml round-trip', () => {
   });
 
   it('reimporta um MultiPolygon exportado preservando geometria, nome, descrição e campos personalizados', () => {
-    // O importador (Task 8) decompõe uma MultiGeometry KML em um PolygonEntity
-    // por parte (GeometryCollection), então uma MultiPolygon com 2 partes
-    // reimporta como 2 Polygons — cada um preservando as coordenadas WGS84
-    // [lon, lat] da parte correspondente e as propriedades do Placemark.
+    // O importador funde os membros Polygon de uma MultiGeometry KML (um
+    // único Placemark) de volta em uma única entidade MultiPolygon: a
+    // MultiGeometry representa uma única entidade lógica com N partes, e é
+    // assim que o app deve tratá-la ao reimportar (ver `multipolygon.kml`
+    // e o cenário E2E "importa MultiPolygon como uma única entidade").
     const kmlText = serializePolygonKml(multiPolygonEntity);
     const { polygons } = parseKml(kmlText);
 
-    expect(polygons).toHaveLength(2);
+    expect(polygons).toHaveLength(1);
+    const reimported = polygons[0];
 
-    const originalParts = multiPolygonEntity.geometry.coordinates.map((coords) => ({
-      type: 'Polygon' as const,
-      coordinates: coords,
-    }));
+    expect(reimported.geometry).toEqual(multiPolygonEntity.geometry);
+    expect(reimported.properties.name).toBe(multiPolygonEntity.properties.name);
+    expect(reimported.properties.description).toBe(multiPolygonEntity.properties.description);
+    expect(reimported.properties.customFields.map((f) => [f.key, f.value])).toEqual(
+      expect.arrayContaining([['safra', '2026']]),
+    );
 
-    for (const reimported of polygons) {
-      expect(originalParts).toContainEqual(reimported.geometry);
-      expect(reimported.properties.name).toBe(multiPolygonEntity.properties.name);
-      expect(reimported.properties.description).toBe(multiPolygonEntity.properties.description);
-      expect(reimported.properties.customFields.map((f) => [f.key, f.value])).toEqual(
-        expect.arrayContaining([['safra', '2026']]),
-      );
-
-      // Área deve ser recalculada a partir da geometria reimportada, não copiada do valor exportado.
-      expect(reimported.calculated.areaSquareMeters).not.toBe(multiPolygonEntity.calculated.areaSquareMeters);
-      expect(reimported.calculated.areaSquareMeters).toBeGreaterThan(0);
-    }
+    // Área deve ser recalculada a partir da geometria reimportada, não copiada do valor exportado.
+    expect(reimported.calculated.areaSquareMeters).not.toBe(multiPolygonEntity.calculated.areaSquareMeters);
+    expect(reimported.calculated.areaSquareMeters).toBeGreaterThan(0);
   });
 });

@@ -5,7 +5,7 @@ import { SatelliteLayer, type SatelliteSource } from './SatelliteLayer';
 import { LayerSwitcher } from './LayerSwitcher';
 import { usePolygons } from '../../app/PolygonProvider';
 import { PolygonLayer } from './PolygonLayer';
-import { GeomanController } from './GeomanController';
+import { TerraDrawController } from './TerraDrawController';
 import { MapFocusController } from './MapFocusController';
 import { PolygonPicker } from './PolygonPicker';
 import { OverlapHighlight } from './OverlapHighlight';
@@ -32,7 +32,7 @@ export function MapView() {
           <PolygonLayer key={polygon.id} polygon={polygon} overlapping={overlappingPolygonIds.has(polygon.id)} />
         ))}
         <OverlapHighlight />
-        <GeomanController />
+        <TerraDrawController />
         <MapFocusController />
         <PolygonPicker />
       </MapContainer>
