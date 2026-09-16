@@ -8,10 +8,14 @@ import type { PolygonEntity } from './types/polygon';
 
 // Mirrors the mocking approach used in MapView.test.tsx: react-leaflet is mocked
 // entirely so the map renders without a real Leaflet/DOM canvas, and geometry
-// changes are driven directly through the store (as GeomanController.test.tsx
-// does with `store.updateGeometry`) instead of simulating real Geoman drawing.
+// changes are driven directly through the store (`store.updateGeometry`)
+// instead of simulating a real map editor drawing interaction.
 const leaflet = vi.hoisted(() => ({
-  map: { on: vi.fn(), off: vi.fn(), pm: { setLang: vi.fn(), disableDraw: vi.fn(), enableDraw: vi.fn() } },
+  map: { on: vi.fn(), off: vi.fn() },
+}));
+
+vi.mock('./components/MapView/TerraDrawController', () => ({
+  TerraDrawController: () => null,
 }));
 
 vi.mock('react-leaflet', () => ({
@@ -42,7 +46,7 @@ function buildPolygon(id: string, name: string): PolygonEntity {
 function Seed({ polygons }: { polygons: PolygonEntity[] }) {
   const store = usePolygons();
   // Expose the store on window so the test can drive geometry updates
-  // directly, standing in for a real Geoman edit event.
+  // directly, standing in for a real map editor edit event.
   (window as unknown as { __store: ReturnType<typeof usePolygons> }).__store = store;
 
   useEffect(() => {
@@ -101,7 +105,7 @@ describe('App integration', () => {
     });
     expect(screen.getByLabelText('Nome')).toHaveValue('Fazenda Alfa Renomeada');
 
-    // Simulate a geometry update (standing in for a real Geoman edit).
+    // Simulate a geometry update (standing in for a real map editor edit).
     act(() => {
       getStore().updateGeometry(
         'a',
