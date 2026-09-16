@@ -370,8 +370,6 @@ npm run build
 
 O **Regula é o sistema-base** no qual esta feature será implementada. O objetivo não é migrar este protótipo inteiro, trocar a stack do Regula ou manter dois motores de mapas. A implementação deve preservar a arquitetura existente e transportar apenas os comportamentos geoespaciais validados aqui.
 
-> Se uma capacidade já existe no Regula, ela deve ser reutilizada. Se não existe, deve-se escolher uma biblioteca compatível com a stack atual e com capacidade equivalente ou superior à usada pelo protótipo.
-
 Consequentemente:
 
 - este protótipo continua usando Leaflet, React-Leaflet e Leaflet-Geoman;
