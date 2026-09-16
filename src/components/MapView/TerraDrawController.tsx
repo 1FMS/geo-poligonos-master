@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMap } from 'react-leaflet';
-import type { FeatureId, TerraDraw, TerraDrawEventListeners } from 'terra-draw';
+import type { GeoJSONStoreFeatures, GeoJSONStoreGeometries, TerraDraw, TerraDrawEventListeners } from 'terra-draw';
+
+// terra-draw defines `FeatureId` (string | number) in its internal store module
+// but does not re-export it from the package root; mirror it locally instead
+// of reaching into terra-draw's dist internals.
+type FeatureId = string | number;
 import { usePolygons } from '../../app/PolygonProvider';
 import { calculateAreaSquareMeters } from '../../services/geo/calculateArea';
 import { createTerraDraw } from './createTerraDraw';
@@ -23,7 +28,7 @@ interface EditingSession {
   featureIds: FeatureId[];
 }
 
-const isEditingFeatureFor = (polygonId: string) => (feature: TerraPolygonFeature): boolean =>
+const isEditingFeatureFor = (polygonId: string) => (feature: GeoJSONStoreFeatures<GeoJSONStoreGeometries>): boolean =>
   feature.properties?.polygonId === polygonId && feature.properties?.source === 'editing';
 
 export function TerraDrawController({ onDrawReady }: TerraDrawControllerProps) {
