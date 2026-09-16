@@ -1,9 +1,12 @@
 import DxfParser from 'dxf-parser';
 import type { IEntity } from 'dxf-parser';
+import { feature } from '@turf/helpers';
+import center from '@turf/center';
 
 import { calculateAreaSquareMeters } from '../geo/calculateArea';
 import { isValidPolygonGeometry } from '../geo/polygonUtils';
 import { fromUtm } from '../geo/coordinateConverter';
+import { geometryHasSelfIntersection, repairSelfIntersectingPolygon } from '../geo/repairSelfIntersection';
 import { NoSupportedGeometryError } from '../kml/importKml';
 import type { PolygonEntity, PolygonGeometry } from '../../types/polygon';
 
@@ -51,7 +54,38 @@ const toPolygonGeometry = (
   const positions = entity.vertices.map((vertex) => fromUtm(vertex.x, vertex.y, utmZone, utmHemisphere));
   const ring = [...positions, positions[0]];
   const geometry: PolygonGeometry = { type: 'Polygon', coordinates: [ring] };
-  return isValidPolygonGeometry(geometry) ? geometry : null;
+  if (!isValidPolygonGeometry(geometry)) return null;
+
+  // CAD-digitized lot boundaries occasionally have vertices out of order,
+  // producing a "bowtie" (self-intersecting) ring that renders and computes
+  // an area fine but that Terra Draw's own geometry validation rejects
+  // outright when the entity is later opened for editing. Attempt a
+  // conservative repair here, at import time, rather than surfacing an
+  // uneditable polygon later with no clear explanation.
+  if (geometryHasSelfIntersection(geometry)) {
+    return repairSelfIntersectingPolygon(geometry);
+  }
+
+  return geometry;
+};
+
+// CAD lot drawings commonly repeat a lot's boundary across more than one
+// layer (e.g. an outline layer and a separate hatch/fill layer tracing the
+// same shape), and the layer-name heuristic above matches every layer
+// containing "lote" — so a single physical lot can otherwise be imported
+// two or three times, stacked on top of itself. Two entities with the same
+// area and centroid to this precision are the same lot traced twice, not
+// two distinct (if coincidentally similar) lots.
+const DUPLICATE_AREA_PRECISION = 2; // m², i.e. matches to the nearest cm²
+const DUPLICATE_CENTROID_PRECISION = 6; // degrees, ~0.1 m
+
+const polygonSignature = (geometry: PolygonGeometry, areaSquareMeters: number): string => {
+  const centroid = center(feature(geometry)).geometry.coordinates;
+  return [
+    areaSquareMeters.toFixed(DUPLICATE_AREA_PRECISION),
+    centroid[0].toFixed(DUPLICATE_CENTROID_PRECISION),
+    centroid[1].toFixed(DUPLICATE_CENTROID_PRECISION),
+  ].join('|');
 };
 
 let importCounter = 0;
@@ -104,6 +138,7 @@ export function parseDxf(text: string, options: ParseDxfOptions): ParseDxfResult
 
   importCounter = 0;
   const polygons: PolygonEntity[] = [];
+  const seenSignatures = new Set<string>();
   let ignoredCount = 0;
 
   for (const entity of dxf!.entities) {
@@ -123,7 +158,15 @@ export function parseDxf(text: string, options: ParseDxfOptions): ParseDxfResult
       continue;
     }
 
-    polygons.push(buildEntity(geometry, entity.layer));
+    const entityToAdd = buildEntity(geometry, entity.layer);
+    const signature = polygonSignature(geometry, entityToAdd.calculated.areaSquareMeters);
+    if (seenSignatures.has(signature)) {
+      ignoredCount += 1;
+      continue;
+    }
+    seenSignatures.add(signature);
+
+    polygons.push(entityToAdd);
   }
 
   if (polygons.length === 0) {
