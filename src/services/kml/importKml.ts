@@ -28,6 +28,17 @@ const isPolygonGeometry = (geometry: GeoJSON.Geometry): geometry is PolygonGeome
   (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') &&
   isValidPolygonGeometry(geometry as PolygonGeometry);
 
+// `@tmcw/togeojson` does not merge a KML <MultiGeometry> of several sibling
+// <Polygon> elements into a single GeoJSON MultiPolygon: it always yields a
+// GeometryCollection with one member per <Polygon>. A KML MultiGeometry
+// represents one logical placemark, so its polygon members must collapse
+// into a single MultiPolygon entity rather than one entity per member.
+const mergeToMultiPolygon = (members: PolygonGeometry[]): PolygonGeometry => {
+  if (members.length === 1) return members[0];
+  const rings = members.flatMap((member) => (member.type === 'Polygon' ? [member.coordinates] : member.coordinates));
+  return { type: 'MultiPolygon', coordinates: rings };
+};
+
 const KML_STYLE_PROPERTY_KEYS = new Set([
   'name',
   'description',
@@ -112,12 +123,16 @@ export function parseKml(text: string): ParseKmlResult {
     }
 
     if (geometry.type === 'GeometryCollection') {
+      const polygonMembers: PolygonGeometry[] = [];
       for (const member of geometry.geometries) {
         if (isPolygonGeometry(member)) {
-          polygons.push(buildEntity(member, feature.properties ?? {}));
+          polygonMembers.push(member);
         } else {
           ignoredCount += 1;
         }
+      }
+      if (polygonMembers.length > 0) {
+        polygons.push(buildEntity(mergeToMultiPolygon(polygonMembers), feature.properties ?? {}));
       }
       continue;
     }

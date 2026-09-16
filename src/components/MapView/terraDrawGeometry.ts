@@ -83,6 +83,18 @@ export function createPolygonEntity(geometry: PolygonGeometry): PolygonEntity {
 const clonePolygonCoordinates = (coordinates: Polygon['coordinates']): Polygon['coordinates'] =>
   coordinates.map((ring) => ring.map((position) => [...position]));
 
+// KML/KMZ imports commonly carry a third (altitude) coordinate, e.g.
+// `[-46.6, -23.5, 0]`; terra-draw's own geometry validation rejects any
+// position that isn't a plain [lng, lat] pair ("Feature has invalid
+// coordinates"), which would otherwise make every imported polygon
+// impossible to edit. This app never uses altitude, so positions handed to
+// terra-draw for editing are always normalized to two dimensions; the
+// stored entity geometry itself is untouched (round-tripping through an
+// edit will naturally drop the extra dimension once terra-draw persists
+// its own 2D coordinates back).
+const to2dPolygonCoordinates = (coordinates: Polygon['coordinates']): Polygon['coordinates'] =>
+  coordinates.map((ring) => ring.map((position) => [position[0], position[1]]));
+
 const cloneGeometry = (geometry: PolygonGeometry): PolygonGeometry => geometry.type === 'Polygon'
   ? { type: 'Polygon', coordinates: clonePolygonCoordinates(geometry.coordinates) }
   : { type: 'MultiPolygon', coordinates: geometry.coordinates.map(clonePolygonCoordinates) };
@@ -103,7 +115,7 @@ export function featuresForPolygon(entity: PolygonEntity): TerraPolygonFeature[]
       partIndex,
       identityColor,
     },
-    geometry: { type: 'Polygon', coordinates: clonePolygonCoordinates(coordinates) },
+    geometry: { type: 'Polygon', coordinates: to2dPolygonCoordinates(coordinates) },
   }));
 }
 
