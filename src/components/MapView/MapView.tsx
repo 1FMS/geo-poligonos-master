@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { MapContainer } from 'react-leaflet';
 import { MapStatus } from './MapStatus';
-import { SatelliteLayer, type SatelliteSource } from './SatelliteLayer';
-import { LayerSwitcher } from './LayerSwitcher';
+import { SatelliteLayer } from './SatelliteLayer';
 import { usePolygons } from '../../app/PolygonProvider';
 import { PolygonLayer } from './PolygonLayer';
 import { TerraDrawController } from './TerraDrawController';
@@ -13,7 +12,6 @@ import { OverlapHighlight } from './OverlapHighlight';
 export function MapView() {
   const { polygons, overlappingPolygonIds } = usePolygons();
   const [satelliteAvailable, setSatelliteAvailable] = useState(true);
-  const [satelliteSource, setSatelliteSource] = useState<SatelliteSource>('esri');
 
   return (
     <section className="map-view" aria-label="Mapa de satélite">
@@ -27,7 +25,7 @@ export function MapView() {
         wheelPxPerZoomLevel={90}
         className="map"
       >
-        <SatelliteLayer source={satelliteSource} onAvailabilityChange={setSatelliteAvailable} />
+        <SatelliteLayer onAvailabilityChange={setSatelliteAvailable} />
         {polygons.map(polygon => (
           <PolygonLayer key={polygon.id} polygon={polygon} overlapping={overlappingPolygonIds.has(polygon.id)} />
         ))}
@@ -36,7 +34,6 @@ export function MapView() {
         <MapFocusController />
         <PolygonPicker />
       </MapContainer>
-      <LayerSwitcher source={satelliteSource} onChange={setSatelliteSource} />
       <MapStatus satelliteAvailable={satelliteAvailable} />
     </section>
   );

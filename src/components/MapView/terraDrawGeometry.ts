@@ -83,6 +83,17 @@ export function createPolygonEntity(geometry: PolygonGeometry): PolygonEntity {
 const clonePolygonCoordinates = (coordinates: Polygon['coordinates']): Polygon['coordinates'] =>
   coordinates.map((ring) => ring.map((position) => [...position]));
 
+// terra-draw defaults to rejecting any coordinate with more than 9 decimal
+// places ("Feature has coordinates with excessive precision"). KML/KMZ
+// exports (e.g. from GIS software or Google Earth) routinely carry higher
+// precision than that, which would otherwise make every such imported
+// polygon impossible to edit. 9 decimal places is sub-millimeter at the
+// equator, so rounding to it loses no meaningful accuracy.
+const TERRA_DRAW_COORDINATE_PRECISION = 9;
+
+const roundToTerraDrawPrecision = (value: number): number =>
+  Number(value.toFixed(TERRA_DRAW_COORDINATE_PRECISION));
+
 // KML/KMZ imports commonly carry a third (altitude) coordinate, e.g.
 // `[-46.6, -23.5, 0]`; terra-draw's own geometry validation rejects any
 // position that isn't a plain [lng, lat] pair ("Feature has invalid
@@ -93,7 +104,10 @@ const clonePolygonCoordinates = (coordinates: Polygon['coordinates']): Polygon['
 // edit will naturally drop the extra dimension once terra-draw persists
 // its own 2D coordinates back).
 const to2dPolygonCoordinates = (coordinates: Polygon['coordinates']): Polygon['coordinates'] =>
-  coordinates.map((ring) => ring.map((position) => [position[0], position[1]]));
+  coordinates.map((ring) => ring.map((position) => [
+    roundToTerraDrawPrecision(position[0]),
+    roundToTerraDrawPrecision(position[1]),
+  ]));
 
 const cloneGeometry = (geometry: PolygonGeometry): PolygonGeometry => geometry.type === 'Polygon'
   ? { type: 'Polygon', coordinates: clonePolygonCoordinates(geometry.coordinates) }

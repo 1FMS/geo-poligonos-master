@@ -157,41 +157,6 @@ button:disabled {
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.85)) drop-shadow(0 0 7px rgba(0, 0, 0, 0.5));
 }
 
-.layer-switcher {
-  position: absolute;
-  z-index: 1000;
-  top: 0.75rem;
-  right: 0.75rem;
-  display: flex;
-  gap: 0.25rem;
-  padding: 0.25rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 2px 8px rgba(30, 36, 31, 0.18);
-}
-
-.layer-switcher button {
-  min-height: 36px;
-  padding: 0.375rem 0.625rem;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--ink);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.layer-switcher button:hover:not([aria-pressed='true']) {
-  background: var(--primary-wash);
-}
-
-.layer-switcher button[aria-pressed='true'] {
-  background: var(--primary);
-  color: #ffffff;
-}
-
 .map-status {
   position: absolute;
   z-index: 1000;

@@ -183,7 +183,15 @@ export function TerraDrawController({ onDrawReady }: TerraDrawControllerProps) {
         .map(feature => feature.id)
         .filter((id): id is FeatureId => id !== undefined);
       if (addedIds.length) draw.removeFeatures(addedIds);
+      // Reaching here means terra-draw's own built-in geometry validation
+      // (independent of the `validation` callbacks in createTerraDraw.ts)
+      // rejected the polygon for a reason this app doesn't otherwise expect
+      // (see to2dPolygonCoordinates and geometryFromEditingFeatures for the
+      // cases already handled). Bailing back to non-editing state at least
+      // restores the polygon on the map instead of leaving it hidden with
+      // nothing rendered in its place.
       setError(INVALID_POLYGON_MESSAGE);
+      current.current.setEditing(null);
       return;
     }
 

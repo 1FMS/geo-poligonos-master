@@ -30,10 +30,7 @@ export function ImportKmlButton() {
   const finishImport = (polygons: PolygonEntity[], ignoredCount: number) => {
     importPolygons(polygons);
     requestMapFocus(polygons.map((polygon) => polygon.geometry));
-
-    if (ignoredCount > 0) {
-      window.alert(`${ignoredCount} elemento(s) incompatível(is) ignorado(s).`);
-    }
+    return ignoredCount;
   };
 
   const importDxfFile = (text: string) => {
@@ -46,33 +43,50 @@ export function ImportKmlButton() {
       utmHemisphere: DXF_UTM_HEMISPHERE,
       layers: targetLayers,
     });
-    finishImport(polygons, ignoredCount);
+    return finishImport(polygons, ignoredCount);
+  };
+
+  const importFile = async (file: File): Promise<number> => {
+    const extension = extensionOf(file.name);
+
+    if (extension === '.dxf') {
+      return importDxfFile(await file.text());
+    }
+    if (extension === '.kmz') {
+      const { polygons, ignoredCount } = await parseKmz(await file.arrayBuffer());
+      return finishImport(polygons, ignoredCount);
+    }
+    const { polygons, ignoredCount } = parseKml(await file.text());
+    return finishImport(polygons, ignoredCount);
   };
 
   const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     event.target.value = '';
 
-    if (!file) {
+    if (files.length === 0) {
       return;
     }
 
-    const extension = extensionOf(file.name);
-
     setIsImporting(true);
+    let totalIgnored = 0;
+    const failedFiles: string[] = [];
+
     try {
-      if (extension === '.dxf') {
-        importDxfFile(await file.text());
-      } else if (extension === '.kmz') {
-        const { polygons, ignoredCount } = await parseKmz(await file.arrayBuffer());
-        finishImport(polygons, ignoredCount);
-      } else {
-        const { polygons, ignoredCount } = parseKml(await file.text());
-        finishImport(polygons, ignoredCount);
+      for (const file of files) {
+        try {
+          totalIgnored += await importFile(file);
+        } catch (error) {
+          failedFiles.push(file.name);
+        }
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao importar o arquivo.';
-      window.alert(message);
+
+      if (failedFiles.length > 0) {
+        window.alert(`Falha ao importar: ${failedFiles.join(', ')}`);
+      }
+      if (totalIgnored > 0) {
+        window.alert(`${totalIgnored} elemento(s) incompatível(is) ignorado(s).`);
+      }
     } finally {
       setIsImporting(false);
     }
@@ -87,6 +101,7 @@ export function ImportKmlButton() {
         ref={inputRef}
         type="file"
         accept=".kml,.kmz,.dxf,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+        multiple
         onChange={handleChange}
         disabled={isImporting}
         style={{ display: 'none' }}
