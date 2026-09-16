@@ -5,6 +5,7 @@ import { requestMapFocus } from '../../app/mapFocusBus';
 import { parseKml } from '../../services/kml/importKml';
 import { parseKmz } from '../../services/kml/importKmz';
 import { listDxfLayers, parseDxf } from '../../services/dxf/importDxf';
+import { parseOnrGeoJson } from '../../services/onr/importOnrGeoJson';
 import type { PolygonEntity } from '../../types/polygon';
 
 const extensionOf = (fileName: string): string => fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
@@ -56,6 +57,10 @@ export function ImportKmlButton() {
       const { polygons, ignoredCount } = await parseKmz(await file.arrayBuffer());
       return finishImport(polygons, ignoredCount);
     }
+    if (extension === '.geojson' || extension === '.json') {
+      const { polygons, ignoredCount } = parseOnrGeoJson(await file.text());
+      return finishImport(polygons, ignoredCount);
+    }
     const { polygons, ignoredCount } = parseKml(await file.text());
     return finishImport(polygons, ignoredCount);
   };
@@ -100,7 +105,7 @@ export function ImportKmlButton() {
       <input
         ref={inputRef}
         type="file"
-        accept=".kml,.kmz,.dxf,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz"
+        accept=".kml,.kmz,.dxf,.geojson,.json,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/geo+json"
         multiple
         onChange={handleChange}
         disabled={isImporting}
