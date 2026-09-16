@@ -14,6 +14,7 @@ Este repositório **não é um sistema independente pronto para produção**. El
 - [Modelo de dados](#modelo-de-dados)
 - [Regras de negócio](#regras-de-negócio)
 - [Importação](#importação)
+- [Comparação com a ONR](#comparação-com-a-onr)
 - [Exportação e relatórios](#exportação-e-relatórios)
 - [Testes](#testes)
 - [Limitações](#limitações)
@@ -32,7 +33,8 @@ O protótipo demonstra uma feature capaz de:
 5. calcular área e coordenadas derivadas;
 6. identificar conflitos por sobreposição;
 7. exportar uma entidade em KML;
-8. gerar um relatório PDF individual.
+8. gerar um relatório PDF individual;
+9. buscar, no mapa público da ONR, um polígono correspondente ao lote selecionado e sinalizar o percentual real de sobreposição entre eles.
 
 A intenção é integrar essas capacidades ao domínio, autenticação, permissões e banco Convex do sistema hospedeiro. A seção [Implementação no Regula](#implementação-no-regula) separa o que será preservado, reaproveitado ou adaptado; ela é uma proposta, não uma descrição de algo já implementado.
 
@@ -70,9 +72,16 @@ Contenção quase integral não é classificada como conflito. Quando a interse�
 
 ### Entrada e saída
 
-- importação de `.kml`, `.kmz` e `.dxf`, com seleção de múltiplos arquivos de uma vez (o seletor aceita `multiple`, e cada arquivo é processado em sequência, acumulando avisos de elementos ignorados e falhas por arquivo);
+- importação de `.kml`, `.kmz`, `.dxf` e `.geojson`/`.json`, com seleção de múltiplos arquivos de uma vez (o seletor aceita `multiple`, e cada arquivo é processado em sequência, acumulando avisos de elementos ignorados e falhas por arquivo);
 - exportação individual em `.kml`;
 - relatório individual em `.pdf`.
+
+### Comparação com a ONR
+
+- botão "Buscar na ONR" na tela de detalhes do polígono, que consulta o mapa público da ONR (mapa.onr.org.br) ao redor do lote selecionado;
+- só entram como resultado — e só são adicionados ao projeto — candidatos com sobreposição real ≥ 60% da área do lote selecionado;
+- candidatos aceitos aparecem no mapa em azul, com matrícula e cartório visíveis;
+- detalhes completos do processo, dos riscos e das limitações em [Comparação com a ONR](#comparação-com-a-onr).
 
 ## Como executar localmente
 
@@ -177,6 +186,9 @@ O estado existe somente em memória. Não há `localStorage`, sincronização re
 ### Estrutura
 
 ```text
+scripts/
+└── fetch-onr-polygon.mjs  # busca CLI (Node) na API da ONR, fora do navegador
+
 src/
 ├── app/                 # provider, reducer e eventos de foco
 ├── components/
@@ -188,6 +200,7 @@ src/
 │   ├── files/           # nomes seguros para downloads
 │   ├── geo/             # área, UTM, bounding box e sobreposições
 │   ├── kml/             # KML/KMZ e exportação KML
+│   ├── onr/             # busca, parsing e comparação com o mapa da ONR
 │   └── pdf/             # modelo e renderização do relatório
 └── types/               # tipos centrais do domínio
 ```
@@ -226,6 +239,8 @@ interface CustomField {
 interface PolygonEntity {
   id: string;
   geometry: PolygonGeometry;
+  /** Presente apenas em polígonos trazidos da ONR para comparação. */
+  source?: 'onr';
   properties: {
     name: string;
     description: string;
@@ -247,6 +262,7 @@ interface PolygonEntity {
 | `createdAt` | Navegador | ISO 8601; no Convex pode coexistir com `_creationTime`. |
 | `customFields` | Usuário ou KML | Metadados técnicos de estilo são filtrados. |
 | `areaSquareMeters` | Cálculo | Derivado; não deve ser confiado ao cliente no sistema final. |
+| `source` | Busca na ONR | Ausente em polígonos do usuário; `'onr'` identifica um candidato importado da ONR e muda a cor no mapa (azul). |
 
 UTM, hectares, nomes dos vértices e sobreposições são dados derivados.
 
@@ -269,6 +285,7 @@ UTM, hectares, nomes dos vértices e sobreposições são dados derivados.
 15. **Downloads utilizam nomes sanitizados.**
 16. **A correção de sobreposição altera apenas o polígono escolhido.** O vizinho usado como referência não é modificado; se a sobreposição consumir o polígono inteiro, a operação é recusada em vez de apagá-lo.
 17. **O snap de vértice durante a edição é apenas um auxílio visual.** Ele arredonda a posição para a borda mais próxima dentro de 0,5 m; fora desse raio, a coordenada arrastada pelo usuário é usada normalmente.
+18. **Um candidato da ONR só é exibido e importado com sobreposição real ≥ 60% da área do lote selecionado.** Diferente da regra 13 (contenção ≥ 98% não é conflito), aqui alta sobreposição é o sinal desejado — indica que o candidato é, de fato, o mesmo lote.
 
 ## Importação
 
@@ -334,6 +351,104 @@ Pontos, textos, blocos, linhas abertas e outras entidades são ignorados.
 | DXF | Vértices fechados e layer | Outras entidades; UTM 23S é convertido para WGS84. |
 | Desenho | Vértices do usuário | ID, nome inicial, data e área são gerados. |
 
+## Comparação com a ONR
+
+O mapa público da ONR ([mapa.onr.org.br](https://mapa.onr.org.br)) expõe os polígonos de registro de imóveis georreferenciados do país. Não existe uma API pública documentada para isso, mas o próprio site é servido por uma API ArcGIS REST interna — o protótipo usa essa API para, a partir de um lote já desenhado ou importado, verificar se já existe um polígono correspondente cadastrado na ONR e o quanto ele realmente coincide.
+
+### O que foi descoberto por engenharia reversa
+
+- o formulário de busca visível no site (endereço, matrícula, coordenadas etc.) é protegido por reCAPTCHA v3 e não é a fonte direta dos dados geométricos;
+- por trás do mapa, o site consulta uma camada ArcGIS FeatureServer pública em `gis-mapas.onr.org.br`, autenticada por um token de curta duração (8h);
+- esse token é emitido por um endpoint do próprio `mapa.onr.org.br` (`/paginas/mapa/ajax-renovar-token.php`) que **não exige reCAPTCHA nem autenticação** — um simples `POST` já devolve um token válido;
+- a camada `imoveis_georreferenciamento` devolve, para uma consulta espacial (um envelope/bounding box), a geometria completa de cada polígono (`rings`, estruturalmente idêntico às coordenadas de um `Polygon` GeoJSON) e atributos como `matricula`, `cartorio`, `cidade`, `uf` e `url_mat` (link direto para a matrícula).
+
+> **Risco:** nada disso é uma API pública, versionada ou contratual. A ONR pode mudar a implementação, os nomes das camadas ou o mecanismo de token a qualquer momento, quebrando este fluxo sem aviso prévio. O uso pretendido é uma conferência pontual por lote, nunca scraping em massa do cadastro.
+
+### Duas formas de buscar
+
+1. **Script de linha de comando** — `scripts/fetch-onr-polygon.mjs` roda em Node puro, fora do navegador, então não esbarra em CORS. Recebe latitude, longitude e um raio opcional em metros, renova o token, consulta a camada e imprime um `FeatureCollection` GeoJSON:
+
+   ```bash
+   node scripts/fetch-onr-polygon.mjs -2.524678 -44.247602 50 > lote-onr.geojson
+   ```
+
+   O arquivo gerado pode ser importado normalmente pela tela — "Importar arquivo" também aceita `.geojson`/`.json`, além de KML/KMZ/DXF.
+
+2. **Botão "Buscar na ONR"**, na tela de detalhes do polígono — faz o mesmo processo direto do navegador, sem terminal.
+
+### Por que existe um proxy no Vite
+
+O endpoint de renovação de token não envia cabeçalhos CORS, então uma chamada feita diretamente pelo JavaScript da página seria bloqueada pelo navegador; a consulta ao FeatureServer, em contraste, libera qualquer origem. Para contornar isso em desenvolvimento, `vite.config.ts` declara um proxy:
+
+```ts
+server: {
+  proxy: {
+    '/api/onr-token': {
+      target: 'https://mapa.onr.org.br',
+      changeOrigin: true,
+      rewrite: () => '/paginas/mapa/ajax-renovar-token.php',
+    },
+  },
+},
+```
+
+O servidor de desenvolvimento do Vite roda em Node, não no navegador, então ele pode chamar o endpoint da ONR por trás e devolver o token same-origin para o app. **Isso cobre apenas `npm run dev`.** Um build estático publicado não tem onde rodar esse proxy; na integração com o Regula (ver [Implementação no Regula](#implementação-no-regula)), essa chamada deve virar uma Convex Action, que já roda no servidor.
+
+### Fluxo de busca, do clique ao resultado
+
+```text
+usuário seleciona um lote e clica em "Buscar na ONR"
+              │
+              ▼
+calcula o centro do lote (turf/center)
+              │
+              ▼
+POST /api/onr-token (proxy Vite)  →  token ArcGIS
+              │
+              ▼
+GET FeatureServer/imoveis_georreferenciamento/query
+   (envelope de 30 m ao redor do centro)
+              │
+              ▼
+converte cada feature Esri (rings) para geometria GeoJSON
+              │
+              ▼
+para cada candidato: calcula a % real de sobreposição
+   com o lote selecionado (turf/intersect + área)
+              │
+              ▼
+      sobreposição ≥ 60%? ──não──▶ descartado (não aparece nem é importado)
+              │
+             sim
+              ▼
+importado como PolygonEntity (source: "onr")
+              │
+              ▼
+exibido no painel: "ONR - matrícula X (cartório) — Y% de sobreposição"
+              │
+              ▼
+desenhado no mapa em azul (#2563eb), distinto do verde/laranja de status
+```
+
+Raio de busca (30 m) e limiar de correspondência (60%) são constantes em `PolygonDetails.tsx`, ajustáveis conforme a experiência real de uso.
+
+### Por que 60%, e por que não reaproveitar `detectOverlaps.ts`
+
+A detecção de conflitos entre lotes do próprio usuário ignora contenção quase total (≥ 98%, regra 13) porque ali um lote dentro de outro é aninhamento esperado (ex.: lote dentro do bairro), não um erro. Para a comparação com a ONR a lógica é oposta: uma sobreposição quase total é exatamente o sinal de "é o mesmo lote". Por isso o cálculo (`services/onr/compareOnrCandidates.ts`) é dedicado, usando turf diretamente, sem o filtro de contenção do detector de conflitos internos — e a % é sempre relativa à área do lote selecionado (não uma métrica simétrica como IoU), porque a pergunta é "o quanto do meu lote esse candidato cobre".
+
+### O que é importado, e o que não é
+
+- só entram no projeto os candidatos com sobreposição ≥ 60%; um lote vizinho que apenas caiu dentro do raio de busca, mas é geometricamente distinto, nunca aparece nem polui a lista;
+- cada candidato importado carrega `cartorio`, `cidade`, `uf` e `url_mat` como campos personalizados;
+- um polígono importado da ONR pode ser removido a qualquer momento como qualquer outro ("Excluir polígono"); nada é permanente ou sincronizado de volta com a ONR.
+
+### Limitações desta integração
+
+- depende de uma API interna não documentada da ONR, sujeita a mudar sem aviso;
+- a busca pelo botão só funciona em `npm run dev` (proxy do Vite); um deploy estático desta feature, sem backend próprio, não teria como renovar o token — o script de linha de comando continua funcionando em qualquer lugar, por rodar em Node;
+- o raio de busca é fixo (30 m); um polígono da ONR cujo ponto de referência esteja mais distante do que isso do centro do lote não será encontrado;
+- não há cache: cada busca gera uma nova consulta à ONR.
+
 ## Exportação e relatórios
 
 ### KML
@@ -368,7 +483,8 @@ npm run build
 - sem autosave, histórico ou concorrência;
 - sem limites explícitos de arquivo, entidades ou vértices;
 - arquivos originais não são guardados para auditoria/reprocessamento;
-- a edição de geometria via Terra Draw não suporta polígonos com furos (anéis internos); coordenadas com mais de 9 casas decimais (comuns em KML/KMZ de GIS/Google Earth) são arredondadas somente para fins de edição, sem perda prática de precisão.
+- a edição de geometria via Terra Draw não suporta polígonos com furos (anéis internos); coordenadas com mais de 9 casas decimais (comuns em KML/KMZ de GIS/Google Earth) são arredondadas somente para fins de edição, sem perda prática de precisão;
+- a busca na ONR depende de uma API interna não documentada e só funciona pelo botão em `npm run dev` (veja [Comparação com a ONR](#comparação-com-a-onr)).
 
 ## Implementação no Regula
 
